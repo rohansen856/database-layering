@@ -1,0 +1,89 @@
+services:
+  db-primary:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: appdb
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "-A md5"
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+    ports:
+      - "5435:5432"
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+      - ./init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-replica:
+    image: postgres:15-alpine
+    user: postgres
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      PGUSER: dbuser
+      PGPASSWORD: dbpassword
+    command: >
+      bash -c "
+      rm -rf /var/lib/postgresql/data/*;
+      until pg_basebackup -h db-primary -D /var/lib/postgresql/data -U dbuser -w -R -X stream; do
+        echo 'Waiting for primary to be ready...';
+        sleep 2;
+      done;
+      chmod 700 /var/lib/postgresql/data;
+      postgres
+      "
+    ports:
+      - "5436:5432"
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+    depends_on:
+      db-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8003:8000"
+    environment:
+      PRIMARY_DATABASE_URL: postgresql://dbuser:dbpassword@db-primary:5432/appdb
+      REPLICA_DATABASE_URL: postgresql://dbuser:dbpassword@db-replica:5432/appdb
+      REDIS_URL: redis://redis:6379
+      DB_POOL_MIN_SIZE: 2
+      DB_POOL_MAX_SIZE: 10
+      CACHE_TTL: 300
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  primary_data:
+  replica_data:
