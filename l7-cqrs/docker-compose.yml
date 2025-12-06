@@ -1,0 +1,87 @@
+services:
+  write-db:
+    image: postgres:15-alpine
+    container_name: l7-cqrs-write-db
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: write_db
+    ports:
+      - "5447:5432"
+    volumes:
+      - write_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d write_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  read-db:
+    image: postgres:15-alpine
+    container_name: l7-cqrs-read-db
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: read_db
+    ports:
+      - "5448:5432"
+    volumes:
+      - read_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d read_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6384:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8007:8000"
+    environment:
+      WRITE_DB_URL: postgresql://dbuser:dbpassword@write-db:5432/write_db
+      READ_DB_URL: postgresql://dbuser:dbpassword@read-db:5432/read_db
+      REDIS_URL: redis://redis:6379
+      DB_POOL_MIN_SIZE: 2
+      DB_POOL_MAX_SIZE: 10
+      EVENT_STREAM_NAME: events
+    depends_on:
+      write-db:
+        condition: service_healthy
+      read-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  projector:
+    build: .
+    command: python -m app.projector
+    environment:
+      WRITE_DB_URL: postgresql://dbuser:dbpassword@write-db:5432/write_db
+      READ_DB_URL: postgresql://dbuser:dbpassword@read-db:5432/read_db
+      REDIS_URL: redis://redis:6379
+      DB_POOL_MIN_SIZE: 2
+      DB_POOL_MAX_SIZE: 10
+      EVENT_STREAM_NAME: events
+      PROJECTOR_BATCH_SIZE: 10
+      PROJECTOR_POLL_INTERVAL: 1
+    depends_on:
+      write-db:
+        condition: service_healthy
+      read-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  write_db_data:
+  read_db_data:
