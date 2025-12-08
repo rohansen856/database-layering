@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Transactional data (ACID compliance)
+  postgres:
+    image: postgres:15-alpine
+    container_name: l8-postgres
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: transactional_db
+    ports:
+      - "5449:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d transactional_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB - Document store (flexible schema)
+  mongodb:
+    image: mongo:7
+    container_name: l8-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongouser
+      MONGO_INITDB_ROOT_PASSWORD: mongopassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Cache layer
+  redis:
+    image: redis:7-alpine
+    container_name: l8-redis
+    ports:
+      - "6386:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI application
+  api:
+    build: .
+    container_name: l8-api
+    ports:
+      - "8008:8000"
+    environment:
+      POSTGRES_URL: postgresql://dbuser:dbpassword@postgres:5432/transactional_db
+      MONGODB_URL: mongodb://mongouser:mongopassword@mongodb:27017/
+      REDIS_URL: redis://redis:6379
+      DB_POOL_MIN_SIZE: 2
+      DB_POOL_MAX_SIZE: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  postgres_data:
+  mongodb_data:
