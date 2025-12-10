@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # US-EAST Region
+  db-us-east:
+    image: postgres:15-alpine
+    container_name: l9-db-us-east
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: global_db
+    ports:
+      - "5450:5432"
+    volumes:
+      - db_us_east_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d global_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # EU-WEST Region
+  db-eu-west:
+    image: postgres:15-alpine
+    container_name: l9-db-eu-west
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: global_db
+    ports:
+      - "5451:5432"
+    volumes:
+      - db_eu_west_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d global_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ASIA-PACIFIC Region
+  db-asia-pac:
+    image: postgres:15-alpine
+    container_name: l9-db-asia-pac
+    environment:
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: global_db
+    ports:
+      - "5452:5432"
+    volumes:
+      - db_asia_pac_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d global_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Regional Caches
+  cache-us-east:
+    image: redis:7-alpine
+    container_name: l9-cache-us-east
+    ports:
+      - "6387:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  cache-eu-west:
+    image: redis:7-alpine
+    container_name: l9-cache-eu-west
+    ports:
+      - "6388:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  cache-asia-pac:
+    image: redis:7-alpine
+    container_name: l9-cache-asia-pac
+    ports:
+      - "6389:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Geo Router API
+  api:
+    build: .
+    container_name: l9-api
+    ports:
+      - "8009:8000"
+    environment:
+      # US-EAST
+      DB_US_EAST_URL: postgresql://dbuser:dbpassword@db-us-east:5432/global_db
+      CACHE_US_EAST_URL: redis://cache-us-east:6379
+      # EU-WEST
+      DB_EU_WEST_URL: postgresql://dbuser:dbpassword@db-eu-west:5432/global_db
+      CACHE_EU_WEST_URL: redis://cache-eu-west:6379
+      # ASIA-PAC
+      DB_ASIA_PAC_URL: postgresql://dbuser:dbpassword@db-asia-pac:5432/global_db
+      CACHE_ASIA_PAC_URL: redis://cache-asia-pac:6379
+      # Configuration
+      DB_POOL_MIN_SIZE: 2
+      DB_POOL_MAX_SIZE: 10
+      REPLICATION_ENABLED: "true"
+    depends_on:
+      db-us-east:
+        condition: service_healthy
+      db-eu-west:
+        condition: service_healthy
+      db-asia-pac:
+        condition: service_healthy
+      cache-us-east:
+        condition: service_healthy
+      cache-eu-west:
+        condition: service_healthy
+      cache-asia-pac:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  db_us_east_data:
+  db_eu_west_data:
+  db_asia_pac_data:
