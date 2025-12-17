@@ -163,6 +163,8 @@ docker-compose down
 
 - **[LAYERS.md](LAYERS.md)** - Detailed architecture specifications
 - **[TESTING.md](TESTING.md)** - Comprehensive testing guide (pytest + manual)
+- **[LOAD-TESTING.md](LOAD-TESTING.md)** - Load testing guide using oha
+- **[LOAD-TEST-QUICK-START.md](LOAD-TEST-QUICK-START.md)** - Quick reference for load testing
 - **[DOCKER-TESTING.md](DOCKER-TESTING.md)** - Docker testing guide with examples
 - **[FIXES-DECEMBER-2025.md](FIXES-DECEMBER-2025.md)** - Recent fixes and improvements
 - **[VERIFICATION.md](VERIFICATION.md)** - Verification commands and expected outputs
@@ -171,6 +173,8 @@ docker-compose down
 - **[LICENSE](LICENSE)** - MIT License
 
 ## 🧪 Testing
+
+### Functional Testing
 
 Each layer includes comprehensive tests:
 
@@ -187,6 +191,32 @@ pytest tests/test_*.py::test_specific_function -v
 ```
 
 **Test Coverage**: 200+ tests across all layers
+
+### Load Testing
+
+Performance testing using [oha](https://github.com/hatoo/oha):
+
+```bash
+# Install oha
+cargo install oha
+
+# Load test a specific layer
+./load-test.sh 5
+
+# Custom parameters (5000 requests, 100 concurrency, 30 seconds)
+./load-test.sh -n 5000 -c 100 -d 30 5
+
+# Test only writes
+./load-test.sh -t write 2
+
+# Test only reads
+./load-test.sh -t read 5
+
+# Load test all layers
+./load-test.sh
+```
+
+See [LOAD-TESTING.md](LOAD-TESTING.md) for detailed load testing documentation.
 
 ## 🎓 Learning Path
 
